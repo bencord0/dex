@@ -10,12 +10,11 @@ import (
 	// https://github.com/grpc/grpc-go/issues/711
 	"golang.org/x/net/context"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/dexidp/dex/api"
 	"github.com/dexidp/dex/server/internal"
 	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/version"
+	"github.com/sirupsen/logrus"
 )
 
 // apiVersion increases every time a new call is added to the API. Clients should use this info
@@ -78,37 +77,6 @@ func (d dexAPI) CreateClient(ctx context.Context, req *api.CreateClientReq) (*ap
 	return &api.CreateClientResp{
 		Client: req.Client,
 	}, nil
-}
-
-func (d dexAPI) UpdateClient(ctx context.Context, req *api.UpdateClientReq) (*api.UpdateClientResp, error) {
-	if req.Id == "" {
-		return nil, errors.New("update client: no client ID supplied")
-	}
-
-	err := d.s.UpdateClient(req.Id, func(old storage.Client) (storage.Client, error) {
-		if req.RedirectUris != nil {
-			old.RedirectURIs = req.RedirectUris
-		}
-		if req.TrustedPeers != nil {
-			old.TrustedPeers = req.TrustedPeers
-		}
-		if req.Name != "" {
-			old.Name = req.Name
-		}
-		if req.LogoUrl != "" {
-			old.LogoURL = req.LogoUrl
-		}
-		return old, nil
-	})
-
-	if err != nil {
-		if err == storage.ErrNotFound {
-			return &api.UpdateClientResp{NotFound: true}, nil
-		}
-		d.logger.Errorf("api: failed to update the client: %v", err)
-		return nil, fmt.Errorf("update client: %v", err)
-	}
-	return &api.UpdateClientResp{}, nil
 }
 
 func (d dexAPI) DeleteClient(ctx context.Context, req *api.DeleteClientReq) (*api.DeleteClientResp, error) {

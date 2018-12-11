@@ -2,15 +2,17 @@
 
 ## Overview
 
-Dex is able to use another OpenID Connect provider as an authentication source. When logging in, dex will redirect to the upstream provider and perform the necessary OAuth2 flows to determine the end users email, username, etc. More details on the OpenID Connect protocol can be found in [_An overview of OpenID Connect_](../openid-connect.md).
+Dex is able to use another OpenID Connect provider as an authentication source. When logging in, dex will redirect to the upstream provider and perform the necessary OAuth2 flows to determine the end users email, username, etc. More details on the OpenID Connect protocol can be found in [_An overview of OpenID Connect_][oidc-doc].
 
 Prominent examples of OpenID Connect providers include Google Accounts, Salesforce, and Azure AD v2 ([not v1][azure-ad-v1]).
 
 ## Caveats
 
-This connector does not support the "groups" claim. Progress for this is tracked in [issue #1065][issue-1065].
+Many OpenID Connect providers implement different restrictions on refresh tokens. For example, Google will only issue the first login attempt a refresh token, then not return one after. Because of this, this connector does not refresh the id_token claims when a client of dex redeems a refresh token, which can result in stale user info.
 
-When using refresh tokens, changes to the upstream claims aren't propegated to the id_token returned by dex. If a user's email changes, the "email" claim returned by dex won't change unless the user logs in again. Progress for this is tracked in [issue #863][issue-863].
+It's generally recommended to avoid using refresh tokens with the `oidc` connector.
+
+Progress on this caveat can be tracked in [issue #863][google-refreshing].
 
 ## Configuration
 
@@ -40,6 +42,12 @@ connectors:
     # following field.
     #
     # basicAuthUnsupported: true
+
+    # Some clients require the possibility to get further user details provided
+    # by via the UserInfo endpoint.
+    #
+    # See: http://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+    # userInfo: https://www.googleapis.com/oauth2/v3/userinfo
     
     # Google supports whitelisting allowed domains when using G Suite
     # (Google Apps). The following field can be set to a list of domains
@@ -47,17 +55,8 @@ connectors:
     #
     # hostedDomains:
     #  - example.com
-
-    # List of additional scopes to request in token response
-    # Default is profile and email
-    # Full list at https://github.com/dexidp/dex/blob/master/Documentation/custom-scopes-claims-clients.md
-    # scopes:
-    #  - profile
-    #  - email
-    #  - groups
 ```
 
 [oidc-doc]: openid-connect.md
-[issue-863]: https://github.com/dexidp/dex/issues/863
-[issue-1065]: https://github.com/dexidp/dex/issues/1065
+[google-refreshing]: https://github.com/dexidp/dex/issues/863
 [azure-ad-v1]: https://github.com/coreos/go-oidc/issues/133
