@@ -27,6 +27,7 @@ import (
 	"github.com/dexidp/dex/connector/bitbucketcloud"
 	"github.com/dexidp/dex/connector/github"
 	"github.com/dexidp/dex/connector/gitlab"
+	"github.com/dexidp/dex/connector/keystone"
 	"github.com/dexidp/dex/connector/ldap"
 	"github.com/dexidp/dex/connector/linkedin"
 	"github.com/dexidp/dex/connector/microsoft"
@@ -68,8 +69,9 @@ type Config struct {
 	// Logging in implies approval.
 	SkipApprovalScreen bool
 
-	RotateKeysAfter  time.Duration // Defaults to 6 hours.
-	IDTokensValidFor time.Duration // Defaults to 24 hours
+	RotateKeysAfter      time.Duration // Defaults to 6 hours.
+	IDTokensValidFor     time.Duration // Defaults to 24 hours
+	AuthRequestsValidFor time.Duration // Defaults to 24 hours
 
 	GCFrequency time.Duration // Defaults to 5 minutes
 
@@ -137,7 +139,8 @@ type Server struct {
 
 	now func() time.Time
 
-	idTokensValidFor time.Duration
+	idTokensValidFor     time.Duration
+	authRequestsValidFor time.Duration
 
 	logger logrus.FieldLogger
 }
@@ -197,6 +200,7 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 		storage:                newKeyCacher(c.Storage, now),
 		supportedResponseTypes: supported,
 		idTokensValidFor:       value(c.IDTokensValidFor, 24*time.Hour),
+		authRequestsValidFor:   value(c.AuthRequestsValidFor, 24*time.Hour),
 		skipApproval:           c.SkipApprovalScreen,
 		now:                    now,
 		templates:              tmpls,
@@ -238,8 +242,11 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 	}
 
 	r := mux.NewRouter()
+	handle := func(p string, h http.Handler) {
+		r.Handle(path.Join(issuerURL.Path, p), instrumentHandlerCounter(p, h))
+	}
 	handleFunc := func(p string, h http.HandlerFunc) {
-		r.HandleFunc(path.Join(issuerURL.Path, p), instrumentHandlerCounter(p, h))
+		handle(p, h)
 	}
 	handlePrefix := func(p string, h http.Handler) {
 		prefix := path.Join(issuerURL.Path, p)
@@ -281,7 +288,7 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 	// "authproxy" connector.
 	handleFunc("/callback/{connector}", s.handleConnectorCallback)
 	handleFunc("/approval", s.handleApproval)
-	handleFunc("/healthz", s.handleHealth)
+	handle("/healthz", s.newHealthChecker(ctx))
 	handlePrefix("/static", static)
 	handlePrefix("/theme", theme)
 	s.mux = r
@@ -431,6 +438,7 @@ type ConnectorConfig interface {
 // ConnectorsConfig variable provides an easy way to return a config struct
 // depending on the connector type.
 var ConnectorsConfig = map[string]func() ConnectorConfig{
+	"keystone":        func() ConnectorConfig { return new(keystone.Config) },
 	"mockCallback":    func() ConnectorConfig { return new(mock.CallbackConfig) },
 	"mockPassword":    func() ConnectorConfig { return new(mock.PasswordConfig) },
 	"ldap":            func() ConnectorConfig { return new(ldap.Config) },
